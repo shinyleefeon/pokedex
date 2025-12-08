@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"net/http"
 	"io"
+	"github.com/shinyleefeon/pokedex/internal/pokecache"
+	"time"
 )
 
 type LocationAreaResponse struct {
@@ -21,19 +23,29 @@ type LocationArea struct {
 }
 
 var Offset int = 0
+var cache = pokecache.NewCache(make(map[string]pokecache.CacheEntry), 10*time.Minute)
 
 func MapCommand() error {
-	resp, err := http.Get(fmt.Sprintf("https://pokeapi.co/api/v2/location-area?limit=20&offset=%d", Offset))
-	if err != nil {
-		return fmt.Errorf("failed to fetch locations: %v", err)
-	}
-	defer resp.Body.Close()
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return fmt.Errorf("failed to read response body: %v", err)
-	}
+	req := fmt.Sprintf("https://pokeapi.co/api/v2/location-area?limit=20&offset=%d", Offset)
+	var body []byte
+	data, found := cache.Get(req)
+	if found {
+		body = data
+		//println("USED CACHE")
 
-	var result = LocationAreaResponse{}
+	} else {
+		resp, err := http.Get(req)
+		if err != nil {
+			return fmt.Errorf("failed to fetch locations: %v", err)
+		}
+		defer resp.Body.Close()
+		body, err = io.ReadAll(resp.Body)
+		if err != nil {
+			return fmt.Errorf("failed to read response body: %v", err)
+		}
+		cache.Add(req, body)
+	}
+	var result = LocationAreaResponse{}	
 	if err := json.Unmarshal(body, &result); err != nil {
 		return fmt.Errorf("failed to parse JSON: %v", err)
 	}
